@@ -1,0 +1,56 @@
+name: 'Upsert PR Action'
+description: 'Creates or updates a PR, where both actions are independently configurable.'
+branding:
+  icon: "git-pull-request"
+  color: "purple"
+inputs:
+  github_token:
+    description: 'Token to be used in the GitHub API calls.'
+    required: true
+  pr_source_branch:
+    description: 'The branch to use as the "from" / "head" side of the PR.'
+    required: true
+  pr_destination_branch:
+    description: 'The branch to use as the "to" / "base" side of the PR.'
+    required: true
+  create_pr_title:
+    description: 'The title to use if creating a PR.'
+    required: true
+  update_pr_title:
+    description: 'The title to use if updating a PR.'
+    required: false
+  create_pr_body:
+    description: 'The description to use if creating a PR.'
+    required: false
+  update_pr_body:
+    description: 'The description to use if updating a PR.'
+    required: false
+  create_pr_reviewers:
+    description: 'Comma separated list of GitHub usernames to be added as reviewers if creating a PR.'
+    required: false
+  update_pr_reviewers:
+    description: 'Comma separated list of GitHub usernames to be added as reviewers if updating a PR.'
+    required: false
+  create_pr_draft:
+    description: 'Whether or not to create a draft PR, if creating a PR.'
+    required: false
+  create_pr_template_file:
+    description: 'If create_pr_body is not provided, create_pr_template_file can specify a template for new PRs.'
+    required: false
+    default: '.github/pull_request_template.md'
+  create_pr_body_template_vars:
+    description: 'JSON containing key/values to replace <!-- --> markdown comment template variables, if creating a PR.'
+    required: false
+  update_pr_body_template_vars:
+    description: 'JSON containing key/values to replace <!-- --> markdown comment template variables, if updating a PR.'
+    required: false
+outputs:
+  pr_created:
+    description: '"true" or "false" to indicate a PR was created or already existed.'
+  pr_url:
+    description: 'URL of the PR, whether it was created or updated.'
+  pr_number:
+    description: 'The PR number of the created/updated PR.'
+runs:
+  using: 'node12'
+  main: 'index.js'
