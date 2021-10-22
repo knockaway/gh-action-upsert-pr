@@ -207,7 +207,7 @@ async function addPrReviewers({ githubRest, owner, repo, existingPr, reviewersTo
 
   if (reviewersToAddCsv) {
     for (const additionalReviewer of reviewersToAddCsv.split(',')) {
-      afterPrReviewers.add(reviewersToAddCsv.trim());
+      afterPrReviewers.add(additionalReviewer.trim());
     }
   }
 
