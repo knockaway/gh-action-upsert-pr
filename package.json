@@ -1,6 +1,6 @@
 {
   "name": "@knockaway/gh-action-upsert-pr",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Creates or updates a PR, where both actions are configurable.",
   "main": "index.js",
