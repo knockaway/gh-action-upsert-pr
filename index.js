@@ -146,6 +146,7 @@ async function updatePr({ githubRest, owner, repo, existingPr, core = actionsCor
     repo,
     existingPr,
     reviewersToAddCsv: core.getInput('update_pr_reviewers'),
+    reviewersToReAddCsv: core.getInput('update_pr_rerequest_reviewers'),
   });
 
   core.setOutput('pr_created', 'false');
@@ -200,24 +201,58 @@ function buildBodyFromTemplate({ template, templateVars }) {
  * @param {string} repo
  * @param {object} existingPr
  * @param {string} reviewersToAddCsv
+ * @param {string} reviewersToReAddCsv
  */
-async function addPrReviewers({ githubRest, owner, repo, existingPr, reviewersToAddCsv }) {
-  const beforePrReviewers = new Set(existingPr.requested_reviewers.map(reviewer => reviewer.login));
-  const afterPrReviewers = new Set([...beforePrReviewers]);
+async function addPrReviewers({ githubRest, owner, repo, existingPr, reviewersToAddCsv, reviewersToReAddCsv }) {
+  const requestedReviewers = new Set(existingPr.requested_reviewers.map(reviewer => reviewer.login));
+  const alreadyReviewedReviewers = new Set();
+
+  let page = 1;
+  const per_page = 15;
+  while (true) {
+    console.log(`Requesting page ${page} of pr reviews for PR #${existingPr.number}`);
+
+    // after a review has been requested and given, that user is no longer listed as in the PR's requested_reviewers,
+    // but we don't necessarily want to re-request reviews from them.
+    const { data: reviews } = await githubRest.pulls.listReviews({ owner, repo, pull_number: existingPr.number });
+    for (const review of reviews) {
+      if (review.user?.login) {
+        alreadyReviewedReviewers.add(review.user.login);
+      }
+    }
+
+    if (reviews.length < per_page) {
+      break;
+    }
+    page++;
+  }
+
+  const prReviewersToRequest = new Set();
 
   if (reviewersToAddCsv) {
-    for (const additionalReviewer of reviewersToAddCsv.split(',')) {
-      afterPrReviewers.add(additionalReviewer.trim());
+    for (const reviewer of reviewersToAddCsv.split(',')) {
+      if (!requestedReviewers.has(reviewer) && !alreadyReviewedReviewers.has(reviewer)) {
+        prReviewersToRequest.add(reviewer.trim());
+      }
     }
   }
 
-  const newPrReviewers = [...afterPrReviewers].filter(login => !beforePrReviewers.has(login));
+  if (reviewersToReAddCsv) {
+    for (const reviewer of reviewersToReAddCsv.split(',')) {
+      prReviewersToRequest.add(reviewer.trim());
+    }
+  }
 
-  if (newPrReviewers.length === 0) {
+  if (prReviewersToRequest.size === 0) {
     console.log('No additional reviewers to add.');
     return;
   }
 
-  console.log(`Adding reviewers to PR #${existingPr.number}: ${newPrReviewers.join(', ')}`);
-  await githubRest.pulls.requestReviewers({ owner, repo, pull_number: existingPr.number, reviewers: newPrReviewers });
+  console.log(`Adding reviewers to PR #${existingPr.number}: ${[...prReviewersToRequest].join(', ')}`);
+  await githubRest.pulls.requestReviewers({
+    owner,
+    repo,
+    pull_number: existingPr.number,
+    reviewers: [...prReviewersToRequest],
+  });
 }
