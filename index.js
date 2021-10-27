@@ -209,7 +209,7 @@ async function addPrReviewers({ ctx, existingPr, reviewersToAddCsv, reviewersToR
     // but we don't necessarily want to re-request reviews from them.
     const { data: reviews } = await githubRest.pulls.listReviews({ owner, repo, pull_number: existingPr.number });
     for (const review of reviews) {
-      if (review.user?.login) {
+      if (review.user && review.user.login) {
         alreadyReviewedReviewers.add(review.user.login);
       }
     }
