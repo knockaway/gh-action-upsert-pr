@@ -1,26 +1,34 @@
 'use strict';
 
 const fs = require('fs');
-const actionsCore = require('@actions/core');
-const actionsGithub = require('@actions/github');
+const core = require('@actions/core');
+const github = require('@actions/github');
 
-module.exports = { main, createPr, updatePr };
+module.exports = { main };
+
+/**
+ * @typedef {import("@octokit/plugin-rest-endpoint-methods/dist-types/generated/method-types").RestEndpointMethods} GitHubRest
+ */
+/**
+ * @typedef {Object} Context
+ *   @property {import("@actions/core")} core
+ *   @property {GitHubRest} githubRest
+ *   @property {String} owner
+ *   @property {String} repo
+ */
 
 if (require.main === module) {
-  main().catch();
+  const githubRest = github.getOctokit(core.getInput('github_token', { required: true })).rest;
+  main({ ctx: { core, githubRest, owner: github.context.repo.owner, repo: github.context.repo.repo } }).catch();
 }
 
-async function main({
-  core = actionsCore,
-  github = actionsGithub,
-  owner = github.context.repo.owner,
-  repo = github.context.repo.repo,
-} = {}) {
+/**
+ * @param {Context} ctx
+ */
+async function main({ ctx }) {
+  const { core, githubRest, owner, repo } = ctx;
   try {
-    let prSourceBranch = core.getInput('pr_source_branch');
-    if (!prSourceBranch) {
-      throw new Error('pr_source_branch is required');
-    }
+    let prSourceBranch = core.getInput('pr_source_branch', { required: true });
 
     // the head of a PR can come from another user/org, in which caste the format is org:branch,
     // but if the org:branch format is not used we assume the branch is in the current org
@@ -28,15 +36,7 @@ async function main({
       prSourceBranch = `${owner}:${prSourceBranch}`;
     }
 
-    const prDestinationBranch = core.getInput('pr_destination_branch');
-    if (!prDestinationBranch) {
-      throw new Error('pr_destination_branch is required');
-    }
-
-    const octokit = github.getOctokit(core.getInput('github_token'));
-
-    /** @type import("@octokit/plugin-rest-endpoint-methods/dist-types/generated/method-types").RestEndpointMethods */
-    const githubRest = octokit.rest;
+    const prDestinationBranch = core.getInput('pr_destination_branch', { required: true });
 
     const {
       data: [existingPr],
@@ -48,12 +48,12 @@ async function main({
     });
 
     if (existingPr) {
-      await updatePr({ githubRest, owner, repo, existingPr, core });
+      await updatePr({ ctx, existingPr });
     } else {
-      await createPr({ githubRest, owner, repo, prSourceBranch, prDestinationBranch, core });
+      await createPr({ ctx, prSourceBranch, prDestinationBranch });
     }
   } catch (error) {
-    console.error(error);
+    core.error(error);
     core.setFailed(error.message);
     process.exit(1);
   }
@@ -62,18 +62,14 @@ async function main({
 /**
  * Creates a PR according to the configuration given to this Action.
  *
- * @param {import("@octokit/plugin-rest-endpoint-methods/dist-types/generated/method-types").RestEndpointMethods} githubRest
- * @param {string} owner
- * @param {string} repo
+ * @param {Context} ctx
  * @param {string} prSourceBranch
  * @param {string} prDestinationBranch
- * @param core - Only used for test dependency injection
  */
-async function createPr({ githubRest, owner, repo, prSourceBranch, prDestinationBranch, core = actionsCore }) {
-  const title = core.getInput('create_pr_title');
-  if (!title) {
-    throw new Error('create_pr_title is required when creating a PR');
-  }
+async function createPr({ ctx, prSourceBranch, prDestinationBranch }) {
+  const { core, githubRest, owner, repo } = ctx;
+
+  const title = core.getInput('create_pr_title', { required: true });
   const draft = core.getInput('create_pr_draft') === 'true';
 
   let body = core.getInput('create_pr_body') || '';
@@ -86,14 +82,14 @@ async function createPr({ githubRest, owner, repo, prSourceBranch, prDestination
       // the repository doesn't use a base pull request template. Otherwise, bad
       // parameter value given for template_file
       if (templateFile !== '.github/pull_request_template.md') {
-        console.error(error);
+        core.error(error);
         throw Error(`Error reading the given create_pr_template_file ${templateFile}`);
       }
     }
   }
 
   const templateVars = JSON.parse(core.getInput('create_pr_body_template_vars') || '{}');
-  body = buildBodyFromTemplate({ template: body, templateVars });
+  body = buildBodyFromTemplate({ ctx, template: body, templateVars });
 
   const { data: prJustCreated } = await githubRest.pulls.create({
     owner,
@@ -106,9 +102,7 @@ async function createPr({ githubRest, owner, repo, prSourceBranch, prDestination
   });
 
   await addPrReviewers({
-    githubRest,
-    owner,
-    repo,
+    ctx,
     existingPr: prJustCreated,
     reviewersToAddCsv: core.getInput('create_pr_reviewers'),
   });
@@ -121,29 +115,26 @@ async function createPr({ githubRest, owner, repo, prSourceBranch, prDestination
 /**
  * Updates a PR according to the configuration given to this Action.
  *
- * @param {import("@octokit/plugin-rest-endpoint-methods/dist-types/generated/method-types").RestEndpointMethods} githubRest
- * @param {string} owner
- * @param {string} repo
+ * @param {Context} ctx
  * @param {object} existingPr
- * @param core - Only used for test dependency injection
  */
-async function updatePr({ githubRest, owner, repo, existingPr, core = actionsCore }) {
+async function updatePr({ ctx, existingPr }) {
+  const { core, githubRest, owner, repo } = ctx;
+
   const title = core.getInput('update_pr_title') || existingPr.title;
   let body = core.getInput('update_pr_body') || existingPr.body || '';
   const templateVars = JSON.parse(core.getInput('update_pr_body_template_vars') || '{}');
-  body = buildBodyFromTemplate({ template: body, templateVars });
+  body = buildBodyFromTemplate({ ctx, template: body, templateVars });
 
   if ((title && title !== existingPr.title) || body !== existingPr.body) {
-    console.log(`Updating PR #${existingPr.number}.`);
+    core.info(`Updating PR #${existingPr.number}.`);
     await githubRest.pulls.update({ owner, repo, pull_number: existingPr.number, title, body });
   } else {
-    console.log(`PR #${existingPr.number} is already up-to-date.`);
+    core.info(`PR #${existingPr.number} is already up-to-date.`);
   }
 
   await addPrReviewers({
-    githubRest,
-    owner,
-    repo,
+    ctx,
     existingPr,
     reviewersToAddCsv: core.getInput('update_pr_reviewers'),
     reviewersToReAddCsv: core.getInput('update_pr_rerequest_reviewers'),
@@ -157,11 +148,13 @@ async function updatePr({ githubRest, owner, repo, existingPr, core = actionsCor
 /**
  * Replaces markdown tags in the template with the value specified by the templateVars.
  *
+ * @param {Context} ctx
  * @param {string} template
  * @param {object} templateVars
  * @returns {string}
  */
-function buildBodyFromTemplate({ template, templateVars }) {
+function buildBodyFromTemplate({ ctx, template, templateVars }) {
+  const { core } = ctx;
   let body = template;
 
   for (let [k, v] of Object.entries(templateVars)) {
@@ -172,11 +165,11 @@ function buildBodyFromTemplate({ template, templateVars }) {
     const endTagIndex = body.indexOf(END_TAG);
 
     if (startTagIndex === -1) {
-      console.warn(`Template did not include ${START_TAG}, no spot for the value given in template vars`);
+      core.warning(`Template did not include ${START_TAG}, no spot for the value given in template vars`);
       continue;
     }
     if (endTagIndex === -1) {
-      console.warn(`Template did not include ${END_TAG}, no spot for the value given in template vars`);
+      core.warning(`Template did not include ${END_TAG}, no spot for the value given in template vars`);
       continue;
     }
 
@@ -196,21 +189,21 @@ function buildBodyFromTemplate({ template, templateVars }) {
 /**
  * Adds any reviewers listed in reviewersToAddCsv which are not already reviewers as reviewers of the PR.
  *
- * @param {import("@octokit/plugin-rest-endpoint-methods/dist-types/generated/method-types").RestEndpointMethods} githubRest
- * @param {string} owner
- * @param {string} repo
+ * @param {Context} ctx
  * @param {object} existingPr
  * @param {string} reviewersToAddCsv
- * @param {string} reviewersToReAddCsv
+ * @param {string} [reviewersToReAddCsv]
  */
-async function addPrReviewers({ githubRest, owner, repo, existingPr, reviewersToAddCsv, reviewersToReAddCsv }) {
+async function addPrReviewers({ ctx, existingPr, reviewersToAddCsv, reviewersToReAddCsv }) {
+  const { core, githubRest, owner, repo } = ctx;
+
   const requestedReviewers = new Set(existingPr.requested_reviewers.map(reviewer => reviewer.login));
   const alreadyReviewedReviewers = new Set();
 
   let page = 1;
   const per_page = 15;
   while (true) {
-    console.log(`Requesting page ${page} of pr reviews for PR #${existingPr.number}`);
+    core.info(`Requesting page ${page} of pr reviews for PR #${existingPr.number}`);
 
     // after a review has been requested and given, that user is no longer listed as in the PR's requested_reviewers,
     // but we don't necessarily want to re-request reviews from them.
@@ -239,16 +232,18 @@ async function addPrReviewers({ githubRest, owner, repo, existingPr, reviewersTo
 
   if (reviewersToReAddCsv) {
     for (const reviewer of reviewersToReAddCsv.split(',')) {
-      prReviewersToRequest.add(reviewer.trim());
+      if (!requestedReviewers.has(reviewer)) {
+        prReviewersToRequest.add(reviewer.trim());
+      }
     }
   }
 
   if (prReviewersToRequest.size === 0) {
-    console.log('No additional reviewers to add.');
+    core.info('No additional reviewers to add.');
     return;
   }
 
-  console.log(`Adding reviewers to PR #${existingPr.number}: ${[...prReviewersToRequest].join(', ')}`);
+  core.info(`Adding reviewers to PR #${existingPr.number}: ${[...prReviewersToRequest].join(', ')}`);
   await githubRest.pulls.requestReviewers({
     owner,
     repo,
