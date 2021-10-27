@@ -75,7 +75,13 @@ Comma separated list of GitHub usernames to be added as reviewers if creating a 
 
 Comma separated list of GitHub usernames to be added as reviewers if updating a PR.
 This will not remove any reviewers not in this list, it only ensures that reviewers
-in this list are added.
+in this list are added. If a user has already submitted a review, this action will not
+re-request a review from them, unless they are included in `update_pr_rerequest_reviewers`.
+
+### `update_pr_rerequest_reviewers`
+
+Comma separated list of GitHub usernames to request reviews from, even if they
+have already reviewed the PR.
 
 ### `create_pr_draft`
 

@@ -31,6 +31,9 @@ inputs:
   update_pr_reviewers:
     description: 'Comma separated list of GitHub usernames to be added as reviewers if updating a PR.'
     required: false
+  update_pr_rerequest_reviewers:
+    description: 'Comma separated list of GitHub usernames to request reviews from, even if they have already reviewed the PR.'
+    required: false
   create_pr_draft:
     description: 'Whether or not to create a draft PR, if creating a PR.'
     required: false
