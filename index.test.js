@@ -18,6 +18,8 @@ tap.beforeEach(async t => {
       getInput: sinon.stub().callsFake(x => inputs[x]),
       setOutput: sinon.stub(),
       setFailed: sinon.stub(),
+      info: sinon.stub(),
+      error: sinon.stub(),
     },
     owner: 'knockaway',
     repo: 'gh-action-upsert-pr',
@@ -25,5 +27,5 @@ tap.beforeEach(async t => {
 });
 
 tap.test(async t => {
-  await main(t.context);
+  await main({ ctx: t.context });
 });
