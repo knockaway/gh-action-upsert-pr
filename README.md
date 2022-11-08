@@ -17,7 +17,7 @@ steps:
 
   - name: Create or Update PR
     id: upsert_pr
-    uses: knockaway/gh-action-upsert-pr@v1.1.0
+    uses: knockaway/gh-action-upsert-pr@v1.2.0
     with:
       github_token: ${{ secrets.GITHUB_TOKEN }}
       pr_source_branch: 'feature/make-better'
