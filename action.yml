@@ -55,5 +55,5 @@ outputs:
   pr_number:
     description: 'The PR number of the created/updated PR.'
 runs:
-  using: 'node16'
+  using: 'node20'
   main: 'index.js'
