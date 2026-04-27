@@ -207,7 +207,13 @@ async function addPrReviewers({ ctx, existingPr, reviewersToAddCsv, reviewersToR
 
     // after a review has been requested and given, that user is no longer listed as in the PR's requested_reviewers,
     // but we don't necessarily want to re-request reviews from them.
-    const { data: reviews } = await githubRest.pulls.listReviews({ owner, repo, pull_number: existingPr.number });
+    const { data: reviews } = await githubRest.pulls.listReviews({
+      owner,
+      repo,
+      pull_number: existingPr.number,
+      page,
+      per_page,
+    });
     for (const review of reviews) {
       if (review.user && review.user.login) {
         alreadyReviewedReviewers.add(review.user.login);

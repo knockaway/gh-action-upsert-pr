@@ -1,4 +1,6 @@
 .idea
 .DS_Store
 .nyc_output
-
+.tap
+.node_modules/
+node_modules/
